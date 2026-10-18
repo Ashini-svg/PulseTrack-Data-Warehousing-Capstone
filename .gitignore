@@ -1,0 +1,32 @@
+
+# Python virtual environments and caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Private source datasets
+data/
+*.csv
+*.jsonl
+*.log
+
+# Credentials and local configuration
+.env
+.env.*
+pgpass.conf
+.pgpass
+
+# Editor settings
+.vscode/
+.idea/
+
+# Airflow local runtime files
+airflow.db
+airflow.cfg
+airflow-webserver.pid
+
+# Temporary files
+*.tmp
+*.bak
