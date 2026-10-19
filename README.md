@@ -2,7 +2,7 @@
 
 **Programme:** Zero to Data Engineer — Data Warehouse Design Fundamentals  
 **Course provider:** Zuu Crew Machine Learning Academy  
-**Implemented stack:** Python 3.11, PostgreSQL, psycopg 3.3.6, Apache Airflow 3.3.0 (Ubuntu/WSL 2), SQL; DataGrip used for development and verification.
+**Implemented stack:** Python 3.11, PostgreSQL 18, psycopg 3.3.6, Apache Airflow 3.3.0 (Ubuntu/WSL 2), SQL; DataGrip was used for development and verification.
 
 ## Overview
 
@@ -10,13 +10,15 @@ PulseTrack is a performance-marketing data warehousing project. It processes ele
 
 **CSV/JSONL/event-log sources → PostgreSQL source / Bronze → Silver → Gold Enterprise Data Warehouse → six Data Marts → semantic/OLAP layer → business analytics.**
 
-Python loads and cleans the data; PostgreSQL stores the layers and performs SQL transformations. An **11-task Apache Airflow DAG** orchestrates the stages and runs a final analytical validation. The report includes source profiling, dimensional modelling, SCD Type 2 advertiser history, attribution, reconciliations, controlled replay/recovery tests, and ten business analyses.
+Python loads and cleans the data; PostgreSQL stores the layers and performs SQL transformations. An **11-task Apache Airflow DAG** orchestrates the stages and runs a final analytical validation. The report includes source profiling, dimensional modelling, SCD Type 2 advertiser history, attribution, reconciliations, controlled incremental and recovery tests, and ten business analyses. A separate test reproduced duplicate delivery of 50,000 new impressions and propagated the records through the reporting layers.
 
 ## Source-data availability (public repository)
 
-**The `data/` directory is intentionally omitted from this public repository.** The source datasets were provided by **Zuu Crew Machine Learning Academy** for the capstone assessment. Public redistribution rights have not been established. Authorized users must obtain the original files from the course provider and place them in the `data/` directory shown below before attempting a rebuild. This public repository is **not runnable end to end without those files**.
+**The `data/` folder and its CSV, JSONL and event-log files are intentionally NOT included in this public GitHub repository.** The original datasets were provided by **Zuu Crew Machine Learning Academy** for the capstone assessment, and permission to redistribute them publicly has not been established.
 
-The accompanying report presents the academic analysis and test evidence; review any screenshots or embedded source samples before public distribution to avoid revealing source-sensitive information.
+To reproduce the complete pipeline, an authorised user must obtain the original assessment datasets from the course provider and place them in a local `data/` folder with the exact filenames shown in **Step 2**. The GitHub repository supplies the Python, SQL, DAG, diagrams and report, but **it cannot complete an end-to-end rebuild without the original data**. The synthetic Q5 data-generation script is supplied for reproducibility, but it must not be run on the original dataset.
+
+Do not publish the private lecturer submission ZIP, PostgreSQL credentials, raw source exports or a locally populated `data/` folder. The report contains assessed analysis and screenshots; check it for source-sensitive information before publishing future revisions.
 
 ## Folder structure
 
@@ -24,7 +26,7 @@ The accompanying report presents the academic analysis and test evidence; review
 PulseTrack/
 ├── dags/
 │   └── pulsetrack_pipeline.py
-├── data/                         # Required for running; NOT committed to public repository
+├── data/                         # LOCAL ONLY; excluded from public GitHub repository
 ├── figures/                      # Diagrams and supporting visual materials
 ├── scripts/                      # Python ingestion, processing, loading, audit and validation
 ├── sql/
@@ -42,18 +44,19 @@ PulseTrack/
 │   ├── load_mart.sql
 │   └── validation/
 │       └── *.sql                  # Bronze/Silver/Gold/Mart/semantic checks and business analytics
+├── .gitignore                     # Excludes local data, secrets and generated files
 ├── README.md
-└── PulseTrack_Report.pdf          # Detailed submission report
+└── PulseTrack_Report.pdf          # Detailed project report
 ```
 
-`load_gold_dimensions.sql`, `load_gold_facts.sql` and `load_mart.sql` contain data-loading/refresh logic and are invoked by the corresponding Python loaders. They are **not** extra schema-initialisation scripts.
+`load_gold_dimensions.sql`, `load_gold_facts.sql` and `load_mart.sql` contain data-loading/refresh logic and are invoked by the corresponding Python loaders. They are **not** extra schema-initialisation scripts. `scripts/q5_prepare_impressions.py` is a **test-data generation utility**, not a stage in the 11-task production DAG.
 
 ## Prerequisites
 
 - PostgreSQL server, a PostgreSQL account with permission to create the database and schemas, and a SQL client such as DataGrip or `psql`.
 - Python **3.11** and ability to create a virtual environment (`.venv`).
 - Apache Airflow **3.3.0** if running the orchestrated DAG; the implementation was tested in Ubuntu under WSL 2 using `LocalExecutor`. Airflow is installed **separately** from the project Python environment.
-- The original instructor-provided input datasets, in the filenames listed below. A rebuild will not work without the data.
+- The 11 original CSV files, two JSONL files and event-log export named below. A full rebuild requires these source files.
 
 ### Python environment
 
@@ -87,7 +90,7 @@ The reusable `scripts/db_connection.py` reads these optional environment variabl
 | `PGUSER` | `postgres` | PostgreSQL account |
 | `PGPASSWORD` | unset | Optional password; do not put credentials into source code |
 
-The CSV source loader takes an **explicit database argument** (`--database pulsetrack_capstone`) rather than relying on `PGDATABASE` for its target. The Airflow DAG is configured to use that target for its first task. Rebuilders should use an isolated database and review that setting before making changes.
+The CSV source loader takes an **explicit database argument** (`--database pulsetrack_capstone`) rather than relying on `PGDATABASE` for its target. Its allowed database names are `pulsetrack_capstone`, `pulsetrack_csv_test` and `pulsetrack_backfill_test`. Downstream scripts obtain the database from `PGDATABASE` (default: `pulsetrack_capstone`). **Set both consistently** and check the actual connection before starting. The Airflow DAG hardcodes `pulsetrack_capstone` for its CSV-loading task; do not use it for a differently named test database without changing and retesting that configuration.
 
 **Recommended for the tested Windows-Python setup:** use the personal PostgreSQL password file, outside this project:
 
@@ -129,13 +132,13 @@ If the target database already exists, **do not run the creation script**. Conne
 8. sql/create_semantic_cache.sql
 ```
 
-**Destructive DDL warning:** `pulsetrack_source_schema.sql` is based on the supplied lecturer schema and includes `DROP SCHEMA IF EXISTS pulsetrack_raw CASCADE`. **Run it only in a new, empty database** where resetting the raw schema is intended. Do not execute it against the existing populated warehouse. Inspect other DDL files before executing them on any database that already holds data.
+**Destructive DDL warning:** the supplied-source `pulsetrack_source_schema.sql` includes `DROP SCHEMA IF EXISTS pulsetrack_raw CASCADE`. **Run it only in a new, empty database** where resetting the raw schema is intended. Do not execute it against an existing populated warehouse. Inspect other DDL files before executing them against populated databases.
 
-The proposed ordering follows schema dependencies; unlike the populated end-to-end pipeline, a from-scratch installation of every SQL file has **not** been separately verified as one automated rebuild. Fix any environment- or prerequisite-specific failures before proceeding; do not skip failed SQL statements.
+The proposed ordering follows schema dependencies; unlike the populated end-to-end pipeline, a from-scratch installation of every SQL file has **not** been separately verified as one automated rebuild. `create_semantic_cache.sql` may initially have no cache rows before the Mart is populated; `load_mart.py` refreshes the cache after loading the Mart. Resolve any environment- or prerequisite-specific errors rather than skipping failed SQL statements.
 
-## Step 2 — Provide the source files
+## Step 2 — Provide the source files (not supplied on GitHub)
 
-Place the **eleven original CSVs**, two JSONLs and event log in the project-root `data/` directory, retaining their original filenames:
+After obtaining them **from the course provider through authorised access**, place the eleven original CSVs, two JSONLs and event log in a **local, untracked** `data/` directory, retaining their original filenames:
 
 ```text
 data/
@@ -155,7 +158,7 @@ data/
 └── pulsetrack_conversions.log
 ```
 
-The Python CSV loader (`scripts/load_source_csv.py`) checks file existence and column headers, stages the CSV data using PostgreSQL `COPY`, and compares rows with `EXCEPT ALL`. It inserts additional row occurrences without duplicating unchanged rows; it refuses a source-file change that would silently remove existing database rows. All eleven table imports operate in one database transaction. It does not perform arbitrary existing-row corrections or recreate missing table schemas.
+The Python CSV loader (`scripts/load_source_csv.py`) checks file existence and column headers, stages the CSV data using PostgreSQL `COPY`, and compares rows with `EXCEPT ALL`. It inserts additional row occurrences without duplicating an unchanged snapshot; it refuses a source-file change that would silently remove existing database rows. All eleven imports operate in one transaction. It does **not** perform arbitrary existing-row corrections, identify all newly duplicated rows inside a changed source file, or recreate missing table schemas. By default it reads `data/`; the `PULSETRACK_DATA_DIR` environment variable can override that path for isolated testing.
 
 ## Step 3 — Execute the pipeline
 
@@ -199,6 +202,7 @@ These figures are **observed results for the supplied test dataset**, not generi
 | Original JSONL records | 660 |
 | Original event-log lines | 183,162 |
 | Source records/lines retained across Bronze | 958,166 |
+| Impressions in original Gold fact | 300,000 |
 | Distinct business conversions in Gold | 90,000 |
 | Conversion-history rows in Silver | 126,380 |
 | Conversion touchpoints | 183,529 |
@@ -212,20 +216,82 @@ These figures are **observed results for the supplied test dataset**, not generi
 
 The six Data Mart row counts refer to **aggregate reporting rows**, not distinct source transactions. PostgreSQL `audit.pipeline_runs` logs **ten internal processing stages** (three Bronze, four Silver, two Gold, one Mart). The CSV-loading and final validation task outcomes are available in Airflow logs, not as separate audit stages.
 
-For additional SQL checks, use the files in `sql/validation/`, including `verify_bronze_ingestion.sql`, `verify_silver_quality.sql`, `verify_gold_dimensions.sql`, `verify_gold_facts.sql`, `verify_mart_quality.sql`, `verify_semantic_model.sql` and `pulsetrack_business_analytics.sql`. The final script contains the ten analytical queries. The report provides the detailed evidence and business interpretations.
+For additional SQL checks, use the files in `sql/validation/`, including `verify_bronze_ingestion.sql`, `verify_silver_quality.sql`, `verify_gold_dimensions.sql`, `verify_gold_facts.sql`, `verify_mart_quality.sql`, `verify_semantic_model.sql` and `pulsetrack_business_analytics.sql`. The final script contains the ten analytical queries. `verify_semantic_model.sql` includes **Query 16**, the partner-channel allocation conservation test (546 dates, zero mismatches). The report contains the detailed evidence, including the new Q5 and Q8 screenshots.
 
 ## Scope and limitations
 
-- The SQL schemas and source datasets must be prepared before the pipeline is run; the DAG is not a one-click installation of an empty PostgreSQL server.
-- Initial CSV loading, idempotent CSV reruns, restoration of a removed test row and the integrated 11-task DAG were verified. Complete processing of a newly appended *historical* source record through all layers was **not** separately demonstrated.
-- CSV source updates/deletions are not applied automatically by the append-only loader.
-- The six Data Marts are transactionally **fully refreshed**; date-specific incremental Mart loading and automated backfill have not been demonstrated.
-- The DAG was tested with **manual triggering**. Its retry configuration exists, but automatic retry completion was not separately proven by the controlled recovery test.
-- The supplied dataset does not provide five full years of history; unresolved references are preserved where appropriate.
-- JSONL/event-log source keys are filename and line number, so identical data delivered under a different filename is not fully protected by a content-based file checksum.
+- The SQL schemas and supplied source datasets must be prepared before the pipeline runs; the Airflow DAG is not a one-click installation for an empty PostgreSQL server.
+- Initial CSV loading, unchanged CSV reruns, restoration of a removed test row and the integrated 11-task DAG were verified. An **additional isolated test** delivered 50,000 synthetic historical-period impressions twice: the first delivery inserted 50,000, the second inserted **zero**, and all 350,000 impressions reconciled across Source, Bronze, Silver and Gold after downstream processing.
+- This is **manual historical-period replay and duplicate-delivery evidence**, not a general automated date-scoped backfill system. Late source-row corrections, updates and deletions are not automatically handled by the append-only CSV loader; arbitrary changed-data scenarios remain unverified.
+- All six Data Marts are transactionally **fully refreshed**. Date-specific incremental Mart updates were not implemented.
+- The Airflow DAG was successfully tested using **manual triggering** (`schedule=None`). Its retry configuration exists, but automatic retry completion was not independently demonstrated by the controlled recovery test.
+- The supplied dataset does not contain five complete years of history; unresolved references are preserved where appropriate.
+- JSONL and event-log landing keys use source filename and line number. Identical content arriving under a new filename is not universally deduplicated by content checksum.
+- A completely fresh installation and end-to-end rebuild of all schemas and data on a new PostgreSQL instance has **not** been independently executed as one reproducibility test.
 
-The final report provides the precise business rules, reconciliation details, figures and tested limitations. Do not copy PostgreSQL password files, raw datasets or virtual environments into public repositories.
+The final report contains the exact business rules, Q5/Q8 screenshots, reconciliations, caveats and tested results. Never commit PostgreSQL credentials, local virtual environments, original raw datasets or generated test CSVs to GitHub.
 
-## GitHub repository hygiene
+## Supplementary Q5/Q8 validation (19 October 2026)
 
-Commit the Python and SQL source files, DAG, README, diagrams, report PDF (after a source-sensitive-content review) and `.gitignore`. Do **not** commit instructor datasets, `.venv/`, `__pycache__/`, `*.pyc`, `pgpass.conf`, `.pgpass`, `.env` secrets, or Airflow runtime databases and logs. If files were committed previously, adding `.gitignore` alone does not untrack them.
+### Q5 — Controlled 50,000-record duplicate-delivery and historical-period replay
+
+This experiment was performed **only in a separate database**, `pulsetrack_backfill_test`, created as a PostgreSQL `TEMPLATE` copy of the completed `pulsetrack_capstone` database (both approximately 938 MB when cloned). Original source files were not changed. The input experiment copied the 11 original CSVs to an external `PulseTrack-Q5-TestData` folder, then generated 50,000 additional synthetic impression IDs using the existing impression attributes and dates.
+
+| Stage / check | Observed result |
+|---|---:|
+| Original impressions before test | 300,000 |
+| New impressions in first CSV delivery | +50,000 |
+| New impressions in second delivery of unchanged CSV | **0** |
+| Source impressions after both deliveries | 350,000 |
+| Bronze impressions after processing | 350,000 |
+| Silver impressions after processing | 350,000 |
+| Gold impressions after processing | 350,000 |
+| New impression records quarantined | 0 |
+| Gold-to-Mart checks | 14 PASS |
+| Attribution reconciliation | PASS |
+| OLAP cache validation | PASS |
+
+**How the isolated test was performed** (for authorised users with the original source data):
+
+1. Back up or protect the completed database. Create an isolated copy named `pulsetrack_backfill_test`; `CREATE DATABASE ... WITH TEMPLATE ...` must be run from another database, outside a transaction, while the source database has **no active connections**. Do not run schema-reset SQL on the populated clone.
+2. Copy **all 11 unmodified CSV files** from `data/` into a separate folder named exactly `PulseTrack-Q5-TestData` outside the project. Use the cloned database and **never** edit the original CSV files.
+3. In Windows PowerShell from the project root, activate `.venv`, configure PostgreSQL credentials privately and run the commands below. If your personal `pgpass.conf` entry is database-specific, add a private entry for **`pulsetrack_backfill_test`** as well (or securely set a temporary `PGPASSWORD` in the terminal). The preparation script intentionally rejects other folder names and refuses to append its synthetic rows a second time.
+
+```powershell
+$env:PGDATABASE = "pulsetrack_backfill_test"
+$env:PULSETRACK_DATA_DIR = "$env:USERPROFILE\Downloads\PulseTrack-Q5-TestData"
+
+# Verify the actual database connection before making changes.
+python -c "import sys; sys.path.insert(0,'scripts'); from db_connection import get_connection; c=get_connection(); db=c.execute('SELECT current_database()').fetchone()[0]; c.close(); print(db); assert db == 'pulsetrack_backfill_test'"
+
+# Run ONCE against the copied CSV directory.
+python scripts/q5_prepare_impressions.py
+
+# Deliver once, then deliver the SAME file again.
+python scripts/load_source_csv.py --database pulsetrack_backfill_test
+python scripts/load_source_csv.py --database pulsetrack_backfill_test
+
+# Downstream manual processing, in this order.
+python scripts/ingest_postgres.py
+python scripts/process_transactions.py
+python scripts/load_gold.py
+python scripts/load_mart.py
+python scripts/validate_pipeline.py
+```
+
+Stop if the database verification fails or any processing step reports an error. All downstream scripts must inherit `PGDATABASE=pulsetrack_backfill_test`. **Do not trigger the Airflow DAG for this experiment:** its first task hardcodes `pulsetrack_capstone`, whereas the other scripts use `PGDATABASE`. The test copied an already populated, valid database; it is **not** a test of creating every SQL schema from zero.
+
+The end-to-end processing and validation passed. Because the test uses copies of existing impression attributes with new IDs, it demonstrates controlled historical-period replay and repeated delivery, **not** automatic discovery of every late-arriving correction or every type of source-data change.
+
+### Q8 — Partner-channel allocation conservation
+
+**Query 16** in `sql/validation/verify_semantic_model.sql` compared `mart.partner_daily` with `semantic.partner_channel_allocation_daily` by `date_key` using a full outer join and a tolerance of `0.000001`. It returned **546 dates checked, zero mismatched dates and zero maximum differences** in click credit, weighted conversion credit and attributed revenue.
+
+The result shows the tested allocation conserves those totals. It does not by itself establish the correctness of all business weighting assumptions.
+
+
+## Public repository hygiene
+
+Publicly include the DAG, Python scripts (including `q5_prepare_impressions.py`), SQL schema/load/validation scripts (including Q8 Query 16), architecture figures, this README, the revised report PDF and `.gitignore`. Keep the instructor-provided `data/` files, local test folders, `.venv/`, `__pycache__/`, `.env` secrets, `pgpass.conf`, `.pgpass` and Airflow runtime files **out** of the repository. A `.gitignore` rule does **not** remove files that were previously committed, and browser uploads may bypass ignore rules; inspect uploads before committing.
+
+For this public repository, datasets are deliberately unavailable rather than missing by accident. Dataset access is limited to appropriately authorised course recipients.
