@@ -9,7 +9,10 @@ import psycopg
 from psycopg import sql
 
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+DATA_DIR = Path(
+    os.getenv("PULSETRACK_DATA_DIR")
+    or Path(__file__).resolve().parent.parent / "data"
+)
 
 SOURCE_TABLES = (
     "account_managers_raw",
@@ -47,6 +50,7 @@ def import_sources(database_name):
     ALLOWED_DATABASES = {
         "pulsetrack_csv_test",
         "pulsetrack_capstone",
+        "pulsetrack_backfill_test",
     }
 
     if database_name not in ALLOWED_DATABASES:
